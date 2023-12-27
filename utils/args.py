@@ -4,9 +4,8 @@ import argparse
 
 def add_argument_base(arg_parser):
     # general
-    arg_parser.add_argument('--model', default='slu_tagging', help='model name')
+    arg_parser.add_argument('--model', default='slu_tagging', choices=['slu_tagging', 'slu_bert'], help='model name')
     arg_parser.add_argument('--dataroot', default='./data', help='root of data')
-    arg_parser.add_argument('--word2vec_path', default='./model/tagging_baseline/word2vec_768.txt', help='path of word2vector file path')
     arg_parser.add_argument('--seed', default=114514, type=int, help='Random seed')
     arg_parser.add_argument('--device', type=int, default=-1, help='Use which device: -1 -> cpu ; the index of gpu o.w.')
     arg_parser.add_argument('--testing', action='store_true', help='training or evaluation mode')

@@ -44,7 +44,7 @@ else:
 start_time = time.time()
 train_path = os.path.join(args.dataroot, 'train.json')
 dev_path = os.path.join(args.dataroot, 'development.json')
-Example.configuration(args.dataroot, train_path=train_path, word2vec_path=args.word2vec_path)
+Example.configuration(args.dataroot, train_path=train_path)
 train_dataset = Example.load_dataset(train_path)
 dev_dataset = Example.load_dataset(dev_path)
 args.vocab_size = Example.word_vocab.vocab_size

@@ -49,11 +49,25 @@ Latest version is recommended for all the packages, but make sure that your CUDA
 This is a baseline model based on recurrent neural network. Run the following command to train the model:
 
 ```bash
-python -X utf8 main.py --device 0
+python -X utf8 main.py --model slu_tagging --device 0
 ```
 
 Run the following command to test the model:
 
 ```bash
-python -X utf8 main.py --device 0 --testing
+python -X utf8 main.py --model slu_tagging --testing --testing_path ./path/to/your/model/weights
+```
+
+### SLU Bert
+
+This model utilizes a pretrained BERT model as the backbone. The learning rate should be relatively small for finetuning. Run the following command to train the model:
+
+```bash
+python -X utf8 main.py --model slu_bert --device 0 --lr 5e-5
+```
+
+Run the following command to test the model:
+
+```bash
+python -X utf8 main.py --model slu_bert --testing --testing_path ./path/to/your/model/weights
 ```
