@@ -15,6 +15,7 @@ from utils.example import Example
 from utils.logger import Logger
 from model.slu_tagging import SLUTagging
 from model.slu_bert import SLUBert
+from model.slu_bert_rnn import SLUBertRNN
 
 
 # init args
@@ -61,6 +62,9 @@ if args.model == 'slu_tagging':
 elif args.model == 'slu_bert':
     args.bert_path = './model/bert_base_chinese'
     model = SLUBert(args).to(device)
+elif args.model == 'slu_bert_rnn':
+    args.bert_path = './model/bert_base_chinese'
+    model = SLUBertRNN(args).to(device)
 else:
     raise NotImplementedError(f'no model named {args.model}')
 if args.testing:
