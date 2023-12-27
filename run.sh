@@ -1,0 +1,1 @@
+python -X utf8 main.py --model slu_bert --device 0 --lr 5e-5 --optimizer AdamW --scheduler

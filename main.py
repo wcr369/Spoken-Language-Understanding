@@ -14,6 +14,7 @@ from utils.init import set_random_seed, set_torch_device
 from utils.example import Example
 from utils.logger import Logger
 from model.slu_tagging import SLUTagging
+from model.slu_bert import SLUBert
 
 
 # init args
@@ -30,6 +31,7 @@ for k, v in vars(args).items():
 print('-' * 50, '\n')
 set_random_seed(args.seed)
 device = set_torch_device(args.device)
+args.device_name = device
 print('-' * 50)
 print('Initialization finished ...')
 print(f'Random seed is set to {args.seed}')
@@ -55,13 +57,16 @@ print(f'Dataset size: train -> {len(train_dataset)}, dev -> {len(dev_dataset)}')
 # init model
 if args.model == 'slu_tagging':
     model = SLUTagging(args).to(device)
+    Example.word2vec.load_embeddings(model.word_embed, Example.word_vocab, device=device)
+elif args.model == 'slu_bert':
+    args.bert_path = './model/bert_base_chinese'
+    model = SLUBert(args).to(device)
 else:
     raise NotImplementedError(f'no model named {args.model}')
-Example.word2vec.load_embeddings(model.word_embed, Example.word_vocab, device=device)
 if args.testing:
-    ckpt = torch.load(args.weight_path, map_location=device)
+    ckpt = torch.load(args.testing_path, map_location=device)
     model.load_state_dict(ckpt['model'])
-    print(f'Load saved model from {args.weight_path} finished')
+    print(f'Load saved model from {args.testing_path} finished')
 
 # init optimizer
 if args.optimizer == 'Adam':
@@ -116,7 +121,7 @@ def predict():
         for ui, utt in enumerate(example):
             utt['pred'] = [pred.split('-') for pred in predictions[f'{ei}-{ui}']]
             ptr += 1
-    json.dump(test_json, open(os.path.join(args.dataroot, 'prediction.json'), 'w',encoding='utf-8'), indent=4, ensure_ascii=False)
+    json.dump(test_json, open(os.path.join(ckpt_path, f'{args.model}.json'), 'w',encoding='utf-8'), indent=4, ensure_ascii=False)
 
 
 def train():
@@ -149,7 +154,7 @@ def train():
         print(f'Evaluation: \tEpoch: {i}\tTime: {time.time() - start_time:.4f}\tDev acc: {dev_acc:.2f}\tDev fscore(p/r/f): ({dev_fscore["precision"]:.2f}/{dev_fscore["recall"]:.2f}/{dev_fscore["fscore"]:.2f})')
         if dev_acc > best_result['dev_acc']:
             best_result['dev_loss'], best_result['dev_acc'], best_result['dev_f1'], best_result['iter'] = dev_loss, dev_acc, dev_fscore, i
-            torch.save({'epoch': i, 'model': model.state_dict(), 'optim': optimizer.state_dict()}, os.path.join(ckpt_path, f'{args.model}.pth'))
+            torch.save({'epoch': i, 'model': model.state_dict(), 'optim': optimizer.state_dict()}, os.path.join(ckpt_path, f'{args.model}.bin'))
             print(f'NEW BEST MODEL: \tEpoch: {i}\tDev loss: {dev_loss:.4f}\tDev acc: {dev_acc:.2f}\tDev fscore(p/r/f): ({dev_fscore["precision"]:.2f}/{dev_fscore["recall"]:.2f}/{dev_fscore["fscore"]:.2f})')
         
         if args.scheduler:
