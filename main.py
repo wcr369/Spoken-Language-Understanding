@@ -16,6 +16,7 @@ from utils.logger import Logger
 from model.slu_tagging import SLUTagging
 from model.slu_bert import SLUBert
 from model.slu_bert_rnn import SLUBertRNN
+from model.slu_transformer import SLUTransformer
 
 
 # init args
@@ -65,6 +66,8 @@ elif args.model == 'slu_bert':
 elif args.model == 'slu_bert_rnn':
     args.bert_path = './model/bert_base_chinese'
     model = SLUBertRNN(args).to(device)
+elif args.model == 'slu_transformer':
+    model = SLUTransformer(args).to(device)
 else:
     raise NotImplementedError(f'no model named {args.model}')
 if args.testing:
