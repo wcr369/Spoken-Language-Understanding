@@ -35,7 +35,8 @@ class SLUBert(nn.Module):
         self.decoder = BertDecoder(config.hidden_size, config.num_tags, config.tag_pad_idx)
 
     def forward(self, batch):
-        inputs = self.tokenizer(batch.utt, padding=True, return_tensors='pt')
+        sentences = [' '.join(sentence.replace(' ', '-')) for sentence in batch.utt] # force to split words
+        inputs = self.tokenizer(sentences, padding=True, return_tensors='pt')
         input_ids = inputs['input_ids'].to(self.device)
         attention_mask = inputs['attention_mask'].to(self.device)
         last_hidden_state = self.bert(input_ids, attention_mask=attention_mask, output_hidden_states=True).hidden_states[-1]

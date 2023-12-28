@@ -1,13 +1,10 @@
-#coding=utf8
 import math
 import torch
 import torch.nn as nn
-from transformers import BertTokenizer
-
 
 
 class PositionalEmbedding(nn.Module):
-    def __init__(self, num_features, dropout, max_len=1000):
+    def __init__(self, num_features, dropout, max_len=512):
         super(PositionalEmbedding, self).__init__()
         self.dropout = nn.Dropout(p=dropout)
         pe = torch.zeros(max_len, num_features)
@@ -23,10 +20,10 @@ class PositionalEmbedding(nn.Module):
         return self.dropout(data)
 
 
-class Decoder(nn.Module):
+class TransformerDecoder(nn.Module):
 
     def __init__(self, input_size, num_tags, pad_id):
-        super(Decoder, self).__init__()
+        super(TransformerDecoder, self).__init__()
         self.num_tags = num_tags
         self.output_layer = nn.Linear(input_size, num_tags)
         self.loss_fct = nn.CrossEntropyLoss(ignore_index=pad_id)
@@ -39,40 +36,29 @@ class Decoder(nn.Module):
             loss = self.loss_fct(logits.view(-1, logits.shape[-1]), labels.view(-1))
             return prob, loss
         return (prob, )
-    
+
 
 class SLUTransformer(nn.Module):
 
     def __init__(self, config):
         super(SLUTransformer, self).__init__()
         self.config = config
-        self.cell = config.encoder_cell
-        self.word_embed = nn.Embedding(config.vocab_size, config.embed_size, padding_idx=0)
-        
-        # 使用Transformer替代RNN
-        encoder_layer = nn.TransformerEncoderLayer(d_model=config.embed_size, nhead=config.num_heads)
-        self.transformer_encoder = nn.TransformerEncoder(encoder_layer, num_layers=config.num_layer)
-    
-        
-        self.dropout_layer = nn.Dropout(p=config.dropout)
-        self.output_layer = Decoder(config.embed_size, config.num_tags, config.tag_pad_idx)
+        self.word_embed = nn.Embedding(config.vocab_size, config.embed_size, padding_idx=config.pad_idx)
+        encoder_layer = nn.TransformerEncoderLayer(d_model=config.embed_size, nhead=config.num_heads, dim_feedforward=config.hidden_size, dropout=config.dropout, batch_first=True)
+        self.transformer = nn.TransformerEncoder(encoder_layer, num_layers=config.num_layer)
+        self.linear = nn.Linear(config.embed_size, config.hidden_size)
+        self.decoder = TransformerDecoder(config.hidden_size, config.num_tags, config.tag_pad_idx)
 
     def forward(self, batch):
         tag_ids = batch.tag_ids
         tag_mask = batch.tag_mask
         input_ids = batch.input_ids
-
         embed = self.word_embed(input_ids)
-        embed = embed.permute(1, 0, 2)  # 调整维度顺序，适应Transformer的输入格式
-        transformer_out = self.transformer_encoder(embed)
-        transformer_out = transformer_out.permute(1, 0, 2)  # 调整维度顺序，回到原来的维度顺序
-        
-        hiddens = self.dropout_layer(transformer_out)
-        tag_output = self.output_layer(hiddens, tag_mask, tag_ids)
-
+        transformer_output = self.transformer(embed)
+        hidden = torch.tanh(self.linear(transformer_output))
+        tag_output = self.decoder(hidden, tag_mask, tag_ids)
         return tag_output
-    
-    
+
     def decode(self, label_vocab, batch):
         batch_size = len(batch)
         labels = batch.labels

@@ -21,12 +21,14 @@ from model.slu_transformer import SLUTransformer
 
 # init args
 args = init_args(sys.argv[1:])
-if not args.testing:
-    ckpt_path = f'./ckpt/{args.model}/train_{time.strftime("%Y%m%d%H%M%S", time.localtime())}'
-else:
-    ckpt_path = f'./ckpt/{args.model}/test_{time.strftime("%Y%m%d%H%M%S", time.localtime())}'
+ckpt_path = f'./ckpt/{args.model}'
+if args.encoder_cell is not None:
+    ckpt_path = os.path.join(ckpt_path, str(args.encoder_cell).lower())
 os.makedirs(ckpt_path, exist_ok=True)
-sys.stdout = Logger(os.path.join(ckpt_path, f'{args.model}.log'))
+if not args.testing:
+    sys.stdout = Logger(os.path.join(ckpt_path, 'train.log'))
+else:
+    sys.stdout = Logger(os.path.join(ckpt_path, 'test.log'))
 print('-' * 50)
 for k, v in vars(args).items():
     print(f'{k}: {v}')
@@ -71,9 +73,9 @@ elif args.model == 'slu_transformer':
 else:
     raise NotImplementedError(f'no model named {args.model}')
 if args.testing:
-    ckpt = torch.load(args.testing_path, map_location=device)
-    model.load_state_dict(ckpt['model'])
-    print(f'Load saved model from {args.testing_path} finished')
+    model_path = os.path.join(ckpt_path, 'model.bin')
+    model.load_state_dict(torch.load(model_path, map_location=device))
+    print(f'Load saved model from {model_path} finished')
 
 # init optimizer
 if args.optimizer == 'Adam':
@@ -128,7 +130,7 @@ def predict():
         for ui, utt in enumerate(example):
             utt['pred'] = [pred.split('-') for pred in predictions[f'{ei}-{ui}']]
             ptr += 1
-    json.dump(test_json, open(os.path.join(ckpt_path, f'{args.model}.json'), 'w',encoding='utf-8'), indent=4, ensure_ascii=False)
+    json.dump(test_json, open(os.path.join(ckpt_path, 'prediction.json'), 'w',encoding='utf-8'), indent=4, ensure_ascii=False)
 
 
 def train():
@@ -161,9 +163,9 @@ def train():
         print(f'Evaluation: \tEpoch: {i}\tTime: {time.time() - start_time:.4f}\tDev acc: {dev_acc:.2f}\tDev fscore(p/r/f): ({dev_fscore["precision"]:.2f}/{dev_fscore["recall"]:.2f}/{dev_fscore["fscore"]:.2f})')
         if dev_acc > best_result['dev_acc']:
             best_result['dev_loss'], best_result['dev_acc'], best_result['dev_f1'], best_result['iter'] = dev_loss, dev_acc, dev_fscore, i
-            torch.save({'epoch': i, 'model': model.state_dict(), 'optim': optimizer.state_dict()}, os.path.join(ckpt_path, f'{args.model}.bin'))
+            torch.save(model.state_dict(), os.path.join(ckpt_path, 'model.bin'))
             print(f'NEW BEST MODEL: \tEpoch: {i}\tDev loss: {dev_loss:.4f}\tDev acc: {dev_acc:.2f}\tDev fscore(p/r/f): ({dev_fscore["precision"]:.2f}/{dev_fscore["recall"]:.2f}/{dev_fscore["fscore"]:.2f})')
-        
+
         if args.scheduler:
             scheduler.step()
         print()
