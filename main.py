@@ -5,7 +5,7 @@ import json
 import numpy as np
 import torch
 from torch.optim import Adam, AdamW
-from torch.optim.lr_scheduler import StepLR
+from torch.optim.lr_scheduler import LambdaLR
 
 from utils.vocab import PAD
 from utils.args import init_args
@@ -17,6 +17,9 @@ from model.slu_tagging import SLUTagging
 from model.slu_bert import SLUBert
 from model.slu_bert_rnn import SLUBertRNN
 from model.slu_transformer import SLUTransformer
+from model.slu_rnn_crf import SLURNNCRF
+from model.slu_bert_crf import SLUBertCRF
+from model.slu_bert_rnn_crf import SLUBertRNNCRF
 
 
 # init args
@@ -62,14 +65,27 @@ print(f'Dataset size: train -> {len(train_dataset)}, dev -> {len(dev_dataset)}')
 if args.model == 'slu_tagging':
     model = SLUTagging(args).to(device)
     Example.word2vec.load_embeddings(model.word_embed, Example.word_vocab, device=device)
+    args.use_scheduler = False
 elif args.model == 'slu_bert':
-    args.bert_path = './model/bert_base_chinese'
     model = SLUBert(args).to(device)
+    args.use_scheduler = True
 elif args.model == 'slu_bert_rnn':
-    args.bert_path = './model/bert_base_chinese'
     model = SLUBertRNN(args).to(device)
+    args.use_scheduler = True
 elif args.model == 'slu_transformer':
     model = SLUTransformer(args).to(device)
+    Example.word2vec.load_embeddings(model.word_embed, Example.word_vocab, device=device)
+    args.use_scheduler = False
+elif args.model == 'slu_rnn_crf':
+    model = SLURNNCRF(args).to(device)
+    Example.word2vec.load_embeddings(model.word_embed, Example.word_vocab, device=device)
+    args.use_scheduler = False
+elif args.model == 'slu_bert_crf':
+    model = SLUBertCRF(args).to(device)
+    args.use_scheduler = True
+elif args.model == 'slu_bert_rnn_crf':
+    model = SLUBertRNNCRF(args).to(device)
+    args.use_scheduler = True
 else:
     raise NotImplementedError(f'no model named {args.model}')
 if args.testing:
@@ -84,8 +100,8 @@ elif args.optimizer == 'AdamW':
     optimizer = AdamW(model.parameters(), lr=args.lr)
 else:
     raise NotImplementedError(f'no optimizer named {args.optimizer}')
-if args.scheduler:
-    scheduler = StepLR(optimizer, step_size=10, gamma=0.8)
+if args.use_scheduler:
+    scheduler = LambdaLR(optimizer, lr_lambda=lambda epoch: 1 if epoch < args.warmup_epoch else 0.01)
 print('-' * 50, '\n')
 
 
@@ -149,7 +165,7 @@ def train():
         for j in range(0, nsamples, step_size):
             cur_dataset = [train_dataset[k] for k in train_index[j: j + step_size]]
             current_batch = from_example_list(args, cur_dataset, device, train=True)
-            output, loss = model(current_batch)
+            output, loss = model(current_batch, i >= args.warmup_epoch)
             loss.backward()
             optimizer.step()
             optimizer.zero_grad()
@@ -166,7 +182,7 @@ def train():
             torch.save(model.state_dict(), os.path.join(ckpt_path, 'model.bin'))
             print(f'NEW BEST MODEL: \tEpoch: {i}\tDev loss: {dev_loss:.4f}\tDev acc: {dev_acc:.2f}\tDev fscore(p/r/f): ({dev_fscore["precision"]:.2f}/{dev_fscore["recall"]:.2f}/{dev_fscore["fscore"]:.2f})')
 
-        if args.scheduler:
+        if args.use_scheduler:
             scheduler.step()
         print()
 

@@ -32,7 +32,7 @@ class SLUTagging(nn.Module):
         self.dropout_layer = nn.Dropout(p=config.dropout)
         self.output_layer = TaggingDecoder(config.hidden_size, config.num_tags, config.tag_pad_idx)
 
-    def forward(self, batch):
+    def forward(self, batch, finetune=False):
         tag_ids = batch.tag_ids
         tag_mask = batch.tag_mask
         input_ids = batch.input_ids
