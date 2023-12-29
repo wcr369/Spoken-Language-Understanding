@@ -1,12 +1,29 @@
+import math
 import torch
-from torch import nn
-import torch.nn.utils.rnn as rnn_utils
+import torch.nn as nn
 
 
-class TaggingDecoder(nn.Module):
+class PositionalEmbedding(nn.Module):
+    def __init__(self, num_features, dropout, max_len=512):
+        super(PositionalEmbedding, self).__init__()
+        self.dropout = nn.Dropout(p=dropout)
+        pe = torch.zeros(max_len, num_features)
+        position = torch.arange(0, max_len, dtype=torch.float).unsqueeze(1)
+        div_term = torch.exp(torch.arange(0, num_features, 2).float() * (-math.log(10000.0) / num_features))
+        pe[:, 0::2] = torch.sin(position * div_term)
+        pe[:, 1::2] = torch.cos(position * div_term)
+        pe = pe.unsqueeze(0)
+        self.register_buffer('pe', pe)
+
+    def forward(self, data):
+        data = data + self.pe[:, :data.size(1)]
+        return self.dropout(data)
+
+
+class TransformerDecoder(nn.Module):
 
     def __init__(self, input_size, num_tags, pad_id):
-        super(TaggingDecoder, self).__init__()
+        super(TransformerDecoder, self).__init__()
         self.num_tags = num_tags
         self.output_layer = nn.Linear(input_size, num_tags)
         self.loss_fct = nn.CrossEntropyLoss(ignore_index=pad_id)
@@ -21,30 +38,25 @@ class TaggingDecoder(nn.Module):
         return (prob, )
 
 
-class SLUTagging(nn.Module):
+class SLUTransformer(nn.Module):
 
     def __init__(self, config):
-        super(SLUTagging, self).__init__()
+        super(SLUTransformer, self).__init__()
         self.config = config
-        self.cell = config.encoder_cell
-        self.word_embed = nn.Embedding(config.vocab_size, config.embed_size, padding_idx=0)
-        self.rnn = getattr(nn, self.cell)(config.embed_size, config.hidden_size // 2, num_layers=config.num_layer, bidirectional=True, batch_first=True)
-        self.dropout_layer = nn.Dropout(p=config.dropout)
-        self.output_layer = TaggingDecoder(config.hidden_size, config.num_tags, config.tag_pad_idx)
+        self.word_embed = nn.Embedding(config.vocab_size, config.embed_size, padding_idx=config.pad_idx)
+        encoder_layer = nn.TransformerEncoderLayer(d_model=config.embed_size, nhead=config.num_heads, dim_feedforward=config.hidden_size, dropout=config.dropout, batch_first=True)
+        self.transformer = nn.TransformerEncoder(encoder_layer, num_layers=config.num_layer)
+        self.linear = nn.Linear(config.embed_size, config.hidden_size)
+        self.decoder = TransformerDecoder(config.hidden_size, config.num_tags, config.tag_pad_idx)
 
     def forward(self, batch):
         tag_ids = batch.tag_ids
         tag_mask = batch.tag_mask
         input_ids = batch.input_ids
-        lengths = batch.lengths
-
         embed = self.word_embed(input_ids)
-        packed_inputs = rnn_utils.pack_padded_sequence(embed, lengths, batch_first=True, enforce_sorted=True)
-        packed_rnn_out, h_t_c_t = self.rnn(packed_inputs)  # bsize x seqlen x dim
-        rnn_out, unpacked_len = rnn_utils.pad_packed_sequence(packed_rnn_out, batch_first=True)
-        hiddens = self.dropout_layer(rnn_out)
-        tag_output = self.output_layer(hiddens, tag_mask, tag_ids)
-
+        transformer_output = self.transformer(embed)
+        hidden = torch.tanh(self.linear(transformer_output))
+        tag_output = self.decoder(hidden, tag_mask, tag_ids)
         return tag_output
 
     def decode(self, label_vocab, batch):
@@ -52,6 +64,7 @@ class SLUTagging(nn.Module):
         labels = batch.labels
         output = self.forward(batch)
         prob = output[0]
+        
         predictions = []
         for i in range(batch_size):
             pred = torch.argmax(prob[i], dim=-1).cpu().tolist()

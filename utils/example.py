@@ -1,4 +1,3 @@
-import re
 import json
 
 from utils.vocab import Vocab, LabelVocab
@@ -9,12 +8,11 @@ from utils.evaluator import Evaluator
 class Example():
 
     @classmethod
-    def configuration(cls, root, train_path=None, word2vec_path=None):
+    def configuration(cls, root, train_path=None):
         cls.evaluator = Evaluator()
         cls.word_vocab = Vocab(padding=True, unk=True, filepath=train_path)
-        cls.word2vec = Word2vecUtils(word2vec_path)
+        cls.word2vec = Word2vecUtils('./model/tagging_baseline/word2vec_768.txt')
         cls.label_vocab = LabelVocab(root)
-        cls.pattern = re.compile(r'[a-zA-Z0-9-\(\)\s]+')
 
     @classmethod
     def load_dataset(cls, data_path):
@@ -30,8 +28,7 @@ class Example():
         super(Example, self).__init__()
         self.ex = ex
         self.did = did
-
-        self.utt = Example.pattern.sub('.', ex['asr_1best'])
+        self.utt = ex['asr_1best']
         self.slot = {}
         for label in ex['semantic']:
             act_slot = f'{label[0]}-{label[1]}'
