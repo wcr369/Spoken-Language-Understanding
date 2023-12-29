@@ -1,6 +1,8 @@
 import torch
 from torch import nn
-from transformers import AutoTokenizer, AutoModelForMaskedLM
+from transformers import AutoTokenizer, AutoModel
+
+from utils.lexicon import LexiconMatcher
 
 
 class BertDecoder(nn.Module):
@@ -29,18 +31,26 @@ class SLUBert(nn.Module):
         super(SLUBert, self).__init__()
         self.config = config
         self.device = config.device_name
-        self.tokenizer = AutoTokenizer.from_pretrained(config.bert_path)
-        self.bert = AutoModelForMaskedLM.from_pretrained(config.bert_path)
+        self.tokenizer = AutoTokenizer.from_pretrained(config.bert_version)
+        self.bert = AutoModel.from_pretrained(config.bert_version)
         self.linear = nn.Linear(config.embed_size, config.hidden_size)
         self.decoder = BertDecoder(config.hidden_size, config.num_tags, config.tag_pad_idx)
+        self.matcher = LexiconMatcher()
 
-    def forward(self, batch):
+    def forward(self, batch, finetune=False):
         sentences = [' '.join(sentence.replace(' ', '-')) for sentence in batch.utt] # force to split words
         inputs = self.tokenizer(sentences, padding=True, return_tensors='pt')
         input_ids = inputs['input_ids'].to(self.device)
         attention_mask = inputs['attention_mask'].to(self.device)
-        last_hidden_state = self.bert(input_ids, attention_mask=attention_mask, output_hidden_states=True).hidden_states[-1]
-        outputs = torch.tanh(self.linear(last_hidden_state[:, 1:-1, :])) # ignore [CLS] and [SEP]
+        if finetune:
+            self.bert.train()
+            hidden_state = self.bert(input_ids, attention_mask=attention_mask).last_hidden_state
+        else:
+            self.bert.eval()
+            with torch.no_grad():
+                hidden_state = self.bert(input_ids, attention_mask=attention_mask).last_hidden_state
+        hidden_state = hidden_state[:, 1:-1, :]
+        outputs = torch.tanh(self.linear(hidden_state))
         output_tags = self.decoder(outputs, batch.tag_mask, batch.tag_ids)
         return output_tags
 
@@ -61,6 +71,7 @@ class SLUBert(nn.Module):
                 if (tag == 'O' or tag.startswith('B')) and len(tag_buff) > 0:
                     slot = '-'.join(tag_buff[0].split('-')[1:])
                     value = ''.join([batch.utt[i][j] for j in idx_buff])
+                    value = self.matcher.match(slot, value)
                     idx_buff, tag_buff = [], []
                     pred_tuple.append(f'{slot}-{value}')
                     if tag.startswith('B'):
@@ -72,6 +83,7 @@ class SLUBert(nn.Module):
             if len(tag_buff) > 0:
                 slot = '-'.join(tag_buff[0].split('-')[1:])
                 value = ''.join([batch.utt[i][j] for j in idx_buff])
+                value = self.matcher.match(slot, value)
                 pred_tuple.append(f'{slot}-{value}')
             predictions.append(pred_tuple)
         if len(output) == 1:

@@ -44,16 +44,18 @@ class SLUTransformer(nn.Module):
         super(SLUTransformer, self).__init__()
         self.config = config
         self.word_embed = nn.Embedding(config.vocab_size, config.embed_size, padding_idx=config.pad_idx)
+        self.position_embed = PositionalEmbedding(config.embed_size, config.dropout)
         encoder_layer = nn.TransformerEncoderLayer(d_model=config.embed_size, nhead=config.num_heads, dim_feedforward=config.hidden_size, dropout=config.dropout, batch_first=True)
         self.transformer = nn.TransformerEncoder(encoder_layer, num_layers=config.num_layer)
         self.linear = nn.Linear(config.embed_size, config.hidden_size)
         self.decoder = TransformerDecoder(config.hidden_size, config.num_tags, config.tag_pad_idx)
 
-    def forward(self, batch):
+    def forward(self, batch, finetune=False):
         tag_ids = batch.tag_ids
         tag_mask = batch.tag_mask
         input_ids = batch.input_ids
         embed = self.word_embed(input_ids)
+        embed = self.position_embed(embed)
         transformer_output = self.transformer(embed)
         hidden = torch.tanh(self.linear(transformer_output))
         tag_output = self.decoder(hidden, tag_mask, tag_ids)

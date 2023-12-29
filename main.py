@@ -5,7 +5,7 @@ import json
 import numpy as np
 import torch
 from torch.optim import Adam, AdamW
-from torch.optim.lr_scheduler import StepLR
+from torch.optim.lr_scheduler import LambdaLR
 
 from utils.vocab import PAD
 from utils.args import init_args
@@ -14,9 +14,12 @@ from utils.init import set_random_seed, set_torch_device
 from utils.example import Example
 from utils.logger import Logger
 from model.slu_tagging import SLUTagging
+from model.slu_transformer import SLUTransformer
+from model.slu_rnn_crf import SLURNNCRF
 from model.slu_bert import SLUBert
 from model.slu_bert_rnn import SLUBertRNN
-from model.slu_transformer import SLUTransformer
+from model.slu_bert_crf import SLUBertCRF
+from model.slu_bert_rnn_crf import SLUBertRNNCRF
 
 
 # init args
@@ -25,10 +28,8 @@ ckpt_path = f'./ckpt/{args.model}'
 if args.encoder_cell is not None:
     ckpt_path = os.path.join(ckpt_path, str(args.encoder_cell).lower())
 os.makedirs(ckpt_path, exist_ok=True)
-if not args.testing:
-    sys.stdout = Logger(os.path.join(ckpt_path, 'train.log'))
-else:
-    sys.stdout = Logger(os.path.join(ckpt_path, 'test.log'))
+log_file = 'test.log' if args.testing else 'train.log'
+sys.stdout = Logger(os.path.join(ckpt_path, log_file))
 print('-' * 50)
 for k, v in vars(args).items():
     print(f'{k}: {v}')
@@ -39,17 +40,14 @@ args.device_name = device
 print('-' * 50)
 print('Initialization finished ...')
 print(f'Random seed is set to {args.seed}')
-if args.device >= 0:
-    print(f'Use GPU with index {args.device}')
-else:
-    print('Use CPU as target torch device')
+print(f'device is set as {args.device_name}')
 
 # load dataset
 start_time = time.time()
 train_path = os.path.join(args.dataroot, 'train.json')
 dev_path = os.path.join(args.dataroot, 'development.json')
 Example.configuration(args.dataroot, train_path=train_path)
-train_dataset = Example.load_dataset(train_path)
+train_dataset = Example.load_dataset(train_path, use_correction=args.correction)
 dev_dataset = Example.load_dataset(dev_path)
 args.vocab_size = Example.word_vocab.vocab_size
 args.num_tags = Example.label_vocab.num_tags
@@ -62,14 +60,27 @@ print(f'Dataset size: train -> {len(train_dataset)}, dev -> {len(dev_dataset)}')
 if args.model == 'slu_tagging':
     model = SLUTagging(args).to(device)
     Example.word2vec.load_embeddings(model.word_embed, Example.word_vocab, device=device)
-elif args.model == 'slu_bert':
-    args.bert_path = './model/bert_base_chinese'
-    model = SLUBert(args).to(device)
-elif args.model == 'slu_bert_rnn':
-    args.bert_path = './model/bert_base_chinese'
-    model = SLUBertRNN(args).to(device)
+    args.use_scheduler = False
 elif args.model == 'slu_transformer':
     model = SLUTransformer(args).to(device)
+    Example.word2vec.load_embeddings(model.word_embed, Example.word_vocab, device=device)
+    args.use_scheduler = False
+elif args.model == 'slu_rnn_crf':
+    model = SLURNNCRF(args).to(device)
+    Example.word2vec.load_embeddings(model.word_embed, Example.word_vocab, device=device)
+    args.use_scheduler = False
+elif args.model == 'slu_bert':
+    model = SLUBert(args).to(device)
+    args.use_scheduler = True
+elif args.model == 'slu_bert_rnn':
+    model = SLUBertRNN(args).to(device)
+    args.use_scheduler = True
+elif args.model == 'slu_bert_crf':
+    model = SLUBertCRF(args).to(device)
+    args.use_scheduler = True
+elif args.model == 'slu_bert_rnn_crf':
+    model = SLUBertRNNCRF(args).to(device)
+    args.use_scheduler = True
 else:
     raise NotImplementedError(f'no model named {args.model}')
 if args.testing:
@@ -84,8 +95,8 @@ elif args.optimizer == 'AdamW':
     optimizer = AdamW(model.parameters(), lr=args.lr)
 else:
     raise NotImplementedError(f'no optimizer named {args.optimizer}')
-if args.scheduler:
-    scheduler = StepLR(optimizer, step_size=10, gamma=0.8)
+if args.use_scheduler:
+    scheduler = LambdaLR(optimizer, lr_lambda=lambda epoch: 1 if epoch < args.warmup_epoch else 0.01)
 print('-' * 50, '\n')
 
 
@@ -100,9 +111,9 @@ def decode(choice):
             cur_dataset = dataset[i: i + args.batch_size]
             current_batch = from_example_list(args, cur_dataset, device, train=True)
             pred, label, loss = model.decode(Example.label_vocab, current_batch)
-            for j in range(len(current_batch)):
-                if any([l.split('-')[-1] not in current_batch.utt[j] for l in pred[j]]):
-                    print(current_batch.utt[j], pred[j], label[j])
+            # for j in range(len(current_batch)):
+            #     if any([l.split('-')[-1] not in current_batch.utt[j] for l in pred[j]]):
+            #         print(current_batch.utt[j], pred[j], label[j])
             predictions.extend(pred)
             labels.extend(label)
             total_loss += loss
@@ -149,7 +160,7 @@ def train():
         for j in range(0, nsamples, step_size):
             cur_dataset = [train_dataset[k] for k in train_index[j: j + step_size]]
             current_batch = from_example_list(args, cur_dataset, device, train=True)
-            output, loss = model(current_batch)
+            output, loss = model(current_batch, i >= args.warmup_epoch)
             loss.backward()
             optimizer.step()
             optimizer.zero_grad()
@@ -166,7 +177,7 @@ def train():
             torch.save(model.state_dict(), os.path.join(ckpt_path, 'model.bin'))
             print(f'NEW BEST MODEL: \tEpoch: {i}\tDev loss: {dev_loss:.4f}\tDev acc: {dev_acc:.2f}\tDev fscore(p/r/f): ({dev_fscore["precision"]:.2f}/{dev_fscore["recall"]:.2f}/{dev_fscore["fscore"]:.2f})')
 
-        if args.scheduler:
+        if args.use_scheduler:
             scheduler.step()
         print()
 

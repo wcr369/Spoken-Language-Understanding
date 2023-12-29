@@ -1,7 +1,8 @@
 import torch
 from torch import nn
-import torch.nn.utils.rnn as rnn_utils
-from transformers import AutoTokenizer, AutoModelForMaskedLM
+from transformers import AutoTokenizer, AutoModel
+
+from utils.lexicon import LexiconMatcher
 
 
 class BertRNNDecoder(nn.Module):
@@ -30,23 +31,29 @@ class SLUBertRNN(nn.Module):
         super(SLUBertRNN, self).__init__()
         self.config = config
         self.device = config.device_name
-        self.tokenizer = AutoTokenizer.from_pretrained(config.bert_path)
-        self.bert = AutoModelForMaskedLM.from_pretrained(config.bert_path)
+        self.tokenizer = AutoTokenizer.from_pretrained(config.bert_version)
+        self.bert = AutoModel.from_pretrained(config.bert_version)
         self.rnn = getattr(nn, config.encoder_cell)(config.embed_size, config.hidden_size // 2, num_layers=config.num_layer, bidirectional=True, batch_first=True)
         self.dropout = nn.Dropout(config.dropout)
         self.decoder = BertRNNDecoder(config.hidden_size, config.num_tags, config.tag_pad_idx)
+        self.matcher = LexiconMatcher()
 
-    def forward(self, batch):
+    def forward(self, batch, finetune=False):
         sentences = [' '.join(sentence.replace(' ', '-')) for sentence in batch.utt] # force to split words
         inputs = self.tokenizer(sentences, padding=True, return_tensors='pt')
         input_ids = inputs['input_ids'].to(self.device)
         attention_mask = inputs['attention_mask'].to(self.device)
-        last_hidden_state = self.bert(input_ids, attention_mask=attention_mask, output_hidden_states=True).hidden_states[-1]
-        packed_inputs = rnn_utils.pack_padded_sequence(last_hidden_state[:, 1:-1, :], batch.lengths, batch_first=True, enforce_sorted=True)
-        packed_outputs, _ = self.rnn(packed_inputs)
-        padded_outputs, _ = rnn_utils.pad_packed_sequence(packed_outputs, batch_first=True)
-        outputs = self.dropout(padded_outputs)
-        output_tags = self.decoder(outputs, batch.tag_mask, batch.tag_ids)
+        if finetune:
+            self.bert.train()
+            hidden_state = self.bert(input_ids, attention_mask=attention_mask).last_hidden_state
+        else:
+            self.bert.eval()
+            with torch.no_grad():
+                hidden_state = self.bert(input_ids, attention_mask=attention_mask).last_hidden_state
+        hidden_state = hidden_state[:, 1:-1, :]
+        rnn_outputs, _ = self.rnn(hidden_state)
+        rnn_outputs = self.dropout(rnn_outputs)
+        output_tags = self.decoder(rnn_outputs, batch.tag_mask, batch.tag_ids)
         return output_tags
 
     def decode(self, label_vocab, batch):
@@ -66,6 +73,7 @@ class SLUBertRNN(nn.Module):
                 if (tag == 'O' or tag.startswith('B')) and len(tag_buff) > 0:
                     slot = '-'.join(tag_buff[0].split('-')[1:])
                     value = ''.join([batch.utt[i][j] for j in idx_buff])
+                    value = self.matcher.match(slot, value)
                     idx_buff, tag_buff = [], []
                     pred_tuple.append(f'{slot}-{value}')
                     if tag.startswith('B'):
@@ -77,6 +85,7 @@ class SLUBertRNN(nn.Module):
             if len(tag_buff) > 0:
                 slot = '-'.join(tag_buff[0].split('-')[1:])
                 value = ''.join([batch.utt[i][j] for j in idx_buff])
+                value = self.matcher.match(slot, value)
                 pred_tuple.append(f'{slot}-{value}')
             predictions.append(pred_tuple)
         if len(output) == 1:

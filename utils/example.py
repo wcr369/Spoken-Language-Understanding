@@ -1,4 +1,3 @@
-import re
 import json
 
 from utils.vocab import Vocab, LabelVocab
@@ -10,26 +9,26 @@ class Example():
 
     @classmethod
     def configuration(cls, root, train_path=None):
-        cls.evaluator = Evaluator()
         cls.word_vocab = Vocab(padding=True, unk=True, filepath=train_path)
-        cls.word2vec = Word2vecUtils('./model/tagging_baseline/word2vec_768.txt')
         cls.label_vocab = LabelVocab(root)
+        cls.word2vec = Word2vecUtils('./data/word2vec_768.txt')
+        cls.evaluator = Evaluator()
 
     @classmethod
-    def load_dataset(cls, data_path):
+    def load_dataset(cls, data_path, use_correction=False):
         dataset = json.load(open(data_path, 'r'))
         examples = []
         for di, data in enumerate(dataset):
             for ui, utt in enumerate(data):
-                ex = cls(utt, f'{di}-{ui}')
+                ex = cls(utt, f'{di}-{ui}', use_correction)
                 examples.append(ex)
         return examples
 
-    def __init__(self, ex: dict, did):
+    def __init__(self, ex, did, use_correction=False):
         super(Example, self).__init__()
         self.ex = ex
         self.did = did
-        self.utt = ex['asr_1best']
+        self.utt = ex['manual_transcript'] if use_correction else ex['asr_1best']
         self.slot = {}
         for label in ex['semantic']:
             act_slot = f'{label[0]}-{label[1]}'
