@@ -9,10 +9,10 @@ from utils.evaluator import Evaluator
 class Example():
 
     @classmethod
-    def configuration(cls, root, train_path=None):
+    def configuration(cls, root, train_path=None, word2vec_path=None):
         cls.evaluator = Evaluator()
         cls.word_vocab = Vocab(padding=True, unk=True, filepath=train_path)
-        cls.word2vec = Word2vecUtils('./model/tagging_baseline/word2vec_768.txt')
+        cls.word2vec = Word2vecUtils(word2vec_path)
         cls.label_vocab = LabelVocab(root)
         cls.pattern = re.compile(r'[a-zA-Z0-9-\(\)\s]+')
 
