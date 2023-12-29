@@ -3,10 +3,12 @@ import torch.nn as nn
 from transformers import AutoTokenizer, AutoModelForTokenClassification
 from torchcrf import CRF
 
+from utils.lexicon import LexiconMatcher
+
 
 class BertCRFDecoder(nn.Module):
 
-    def __init__(self, num_dims, num_tags):
+    def __init__(self, num_tags):
         super(BertCRFDecoder, self).__init__()
         self.crf = CRF(num_tags, batch_first=True)
 
@@ -24,9 +26,10 @@ class SLUBertCRF(nn.Module):
         super(SLUBertCRF, self).__init__()
         self.config = config
         self.device = config.device_name
-        self.tokenizer = AutoTokenizer.from_pretrained(config.bert_path)
-        self.bert = AutoModelForTokenClassification.from_pretrained(config.bert_path)
-        self.decoder = BertCRFDecoder(config.embed_size, config.num_tags)
+        self.tokenizer = AutoTokenizer.from_pretrained(config.bert_version)
+        self.bert = AutoModelForTokenClassification.from_pretrained(config.bert_version, num_labels=config.num_tags)
+        self.decoder = BertCRFDecoder(config.num_tags)
+        self.matcher = LexiconMatcher()
 
     def forward(self, batch, finetune=False):
         sentences = [' '.join(sentence.replace(' ', '-')) for sentence in batch.utt] # force to split words
@@ -58,6 +61,7 @@ class SLUBertCRF(nn.Module):
                 if (tag == 'O' or tag.startswith('B')) and len(tag_buff) > 0:
                     slot = '-'.join(tag_buff[0].split('-')[1:])
                     value = ''.join([batch.utt[i][j] for j in idx_buff])
+                    value = self.matcher.match(slot, value)
                     idx_buff, tag_buff = [], []
                     pred_tuple.append(f'{slot}-{value}')
                     if tag.startswith('B'):
@@ -69,6 +73,7 @@ class SLUBertCRF(nn.Module):
             if len(tag_buff) > 0:
                 slot = '-'.join(tag_buff[0].split('-')[1:])
                 value = ''.join([batch.utt[i][j] for j in idx_buff])
+                value = self.matcher.match(slot, value)
                 pred_tuple.append(f'{slot}-{value}')
             predictions.append(pred_tuple)
         if len(output) == 1:

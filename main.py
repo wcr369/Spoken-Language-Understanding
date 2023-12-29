@@ -14,10 +14,10 @@ from utils.init import set_random_seed, set_torch_device
 from utils.example import Example
 from utils.logger import Logger
 from model.slu_tagging import SLUTagging
-from model.slu_bert import SLUBert
-from model.slu_bert_rnn import SLUBertRNN
 from model.slu_transformer import SLUTransformer
 from model.slu_rnn_crf import SLURNNCRF
+from model.slu_bert import SLUBert
+from model.slu_bert_rnn import SLUBertRNN
 from model.slu_bert_crf import SLUBertCRF
 from model.slu_bert_rnn_crf import SLUBertRNNCRF
 
@@ -28,10 +28,8 @@ ckpt_path = f'./ckpt/{args.model}'
 if args.encoder_cell is not None:
     ckpt_path = os.path.join(ckpt_path, str(args.encoder_cell).lower())
 os.makedirs(ckpt_path, exist_ok=True)
-if not args.testing:
-    sys.stdout = Logger(os.path.join(ckpt_path, 'train.log'))
-else:
-    sys.stdout = Logger(os.path.join(ckpt_path, 'test.log'))
+log_file = 'test.log' if args.testing else 'train.log'
+sys.stdout = Logger(os.path.join(ckpt_path, log_file))
 print('-' * 50)
 for k, v in vars(args).items():
     print(f'{k}: {v}')
@@ -42,17 +40,14 @@ args.device_name = device
 print('-' * 50)
 print('Initialization finished ...')
 print(f'Random seed is set to {args.seed}')
-if args.device >= 0:
-    print(f'Use GPU with index {args.device}')
-else:
-    print('Use CPU as target torch device')
+print(f'device is set as {args.device_name}')
 
 # load dataset
 start_time = time.time()
 train_path = os.path.join(args.dataroot, 'train.json')
 dev_path = os.path.join(args.dataroot, 'development.json')
 Example.configuration(args.dataroot, train_path=train_path)
-train_dataset = Example.load_dataset(train_path)
+train_dataset = Example.load_dataset(train_path, use_correction=args.correction)
 dev_dataset = Example.load_dataset(dev_path)
 args.vocab_size = Example.word_vocab.vocab_size
 args.num_tags = Example.label_vocab.num_tags
@@ -66,12 +61,6 @@ if args.model == 'slu_tagging':
     model = SLUTagging(args).to(device)
     Example.word2vec.load_embeddings(model.word_embed, Example.word_vocab, device=device)
     args.use_scheduler = False
-elif args.model == 'slu_bert':
-    model = SLUBert(args).to(device)
-    args.use_scheduler = True
-elif args.model == 'slu_bert_rnn':
-    model = SLUBertRNN(args).to(device)
-    args.use_scheduler = True
 elif args.model == 'slu_transformer':
     model = SLUTransformer(args).to(device)
     Example.word2vec.load_embeddings(model.word_embed, Example.word_vocab, device=device)
@@ -80,6 +69,12 @@ elif args.model == 'slu_rnn_crf':
     model = SLURNNCRF(args).to(device)
     Example.word2vec.load_embeddings(model.word_embed, Example.word_vocab, device=device)
     args.use_scheduler = False
+elif args.model == 'slu_bert':
+    model = SLUBert(args).to(device)
+    args.use_scheduler = True
+elif args.model == 'slu_bert_rnn':
+    model = SLUBertRNN(args).to(device)
+    args.use_scheduler = True
 elif args.model == 'slu_bert_crf':
     model = SLUBertCRF(args).to(device)
     args.use_scheduler = True
@@ -116,9 +111,9 @@ def decode(choice):
             cur_dataset = dataset[i: i + args.batch_size]
             current_batch = from_example_list(args, cur_dataset, device, train=True)
             pred, label, loss = model.decode(Example.label_vocab, current_batch)
-            for j in range(len(current_batch)):
-                if any([l.split('-')[-1] not in current_batch.utt[j] for l in pred[j]]):
-                    print(current_batch.utt[j], pred[j], label[j])
+            # for j in range(len(current_batch)):
+            #     if any([l.split('-')[-1] not in current_batch.utt[j] for l in pred[j]]):
+            #         print(current_batch.utt[j], pred[j], label[j])
             predictions.extend(pred)
             labels.extend(label)
             total_loss += loss

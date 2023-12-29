@@ -1,7 +1,7 @@
 import editdistance_s
 
 
-class Matcher:
+class LexiconMatcher:
     def __init__(self):
         self.vocabs = {}
         self.poi_slots = {'poi名称', 'poi修饰', 'poi目标', '起点名称', '起点修饰', '起点目标', '终点名称', '终点修饰', '终点目标', '途经点名称'}

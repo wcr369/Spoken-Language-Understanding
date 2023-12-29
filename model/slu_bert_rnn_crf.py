@@ -1,8 +1,9 @@
 import torch
 import torch.nn as nn
-import torch.nn.utils.rnn as rnn_utils
 from transformers import AutoTokenizer, AutoModel
 from torchcrf import CRF
+
+from utils.lexicon import LexiconMatcher
 
 
 class BertRNNCRFDecoder(nn.Module):
@@ -32,13 +33,13 @@ class SLUBertRNNCRF(nn.Module):
         self.rnn = getattr(nn, config.encoder_cell)(config.embed_size, config.hidden_size // 2, num_layers=config.num_layer, bidirectional=True, batch_first=True)
         self.dropout = nn.Dropout(p=config.dropout)
         self.decoder = BertRNNCRFDecoder(config.hidden_size, config.num_tags)
+        self.matcher = LexiconMatcher()
 
     def forward(self, batch, finetune=False):
-        inputs = self.tokenizer(batch.utt, padding=True, return_tensors='pt')
+        sentences = [' '.join(sentence.replace(' ', '-')) for sentence in batch.utt] # force to split words
+        inputs = self.tokenizer(sentences, padding=True, return_tensors='pt')
         input_ids = inputs['input_ids'].to(self.device)
         attention_mask = inputs['attention_mask'].to(self.device)
-        batch_size, num_tokens = input_ids.shape
-        tag_ids = torch.cat([torch.zeros((batch_size, 1), dtype=torch.long, device=self.device), batch.tag_ids, torch.zeros((batch_size, 1), dtype=torch.long, device=self.device)], dim=1)[:, :num_tokens]
         if finetune:
             self.bert.train()
             hidden_state = self.bert(input_ids, attention_mask=attention_mask).last_hidden_state
@@ -46,9 +47,10 @@ class SLUBertRNNCRF(nn.Module):
             self.bert.eval()
             with torch.no_grad():
                 hidden_state = self.bert(input_ids, attention_mask=attention_mask).last_hidden_state
+        hidden_state = hidden_state[:, 1:-1, :]
         rnn_outputs, _ = self.rnn(hidden_state)
         rnn_outputs = self.dropout(rnn_outputs)
-        output_tags = self.decoder(rnn_outputs, attention_mask, tag_ids)
+        output_tags = self.decoder(rnn_outputs, batch.tag_mask, batch.tag_ids)
         return output_tags
 
     def decode(self, label_vocab, batch):
@@ -68,6 +70,7 @@ class SLUBertRNNCRF(nn.Module):
                 if (tag == 'O' or tag.startswith('B')) and len(tag_buff) > 0:
                     slot = '-'.join(tag_buff[0].split('-')[1:])
                     value = ''.join([batch.utt[i][j] for j in idx_buff])
+                    value = self.matcher.match(slot, value)
                     idx_buff, tag_buff = [], []
                     pred_tuple.append(f'{slot}-{value}')
                     if tag.startswith('B'):
@@ -79,6 +82,7 @@ class SLUBertRNNCRF(nn.Module):
             if len(tag_buff) > 0:
                 slot = '-'.join(tag_buff[0].split('-')[1:])
                 value = ''.join([batch.utt[i][j] for j in idx_buff])
+                value = self.matcher.match(slot, value)
                 pred_tuple.append(f'{slot}-{value}')
             predictions.append(pred_tuple)
         if len(output) == 1:
