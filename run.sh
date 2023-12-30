@@ -42,5 +42,4 @@ python -X utf8 main.py --model slu_bert_rnn_crf --device 0 --encoder_cell LSTM -
 python -X utf8 main.py --model slu_bert_rnn_crf --device 0 --encoder_cell GRU --lr 2e-3 --optimizer AdamW
 python -X utf8 main.py --model slu_bert_rnn_crf --device 0 --encoder_cell GRU --testing
 
-# slu_bert_rnn_crf (with correction)
-python -X utf8 main.py --model slu_bert_rnn_crf --device 0 --encoder_cell LSTM --lr 2e-3 --optimizer AdamW --correction
+# add --correction for correction
