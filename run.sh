@@ -7,7 +7,7 @@ python -X utf8 main.py --model slu_tagging --device 0 --encoder_cell GRU
 python -X utf8 main.py --model slu_tagging --device 0 --encoder_cell GRU --testing
 
 # slu_transformer
-python -X utf8 main.py --model slu_transformer --device 0 --num_layer 6 --lr 1e-4 --optimizer AdamW
+python -X utf8 main.py --model slu_transformer --device 0 --dropout 0.3 --num_layer 8 --lr 5e-5 --optimizer AdamW
 python -X utf8 main.py --model slu_transformer --device 0 --num_layer 6 --testing
 
 # slu_rnn_crf
