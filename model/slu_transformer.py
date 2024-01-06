@@ -51,7 +51,7 @@ class SLUTransformer(nn.Module):
         self.transformer = nn.TransformerEncoder(encoder_layer, num_layers=config.num_layer)
         self.linear = nn.Linear(config.embed_size, config.hidden_size)
         self.decoder = TransformerDecoder(config.hidden_size, config.num_tags, config.tag_pad_idx)
-        self.matcher = LexiconMatcher()
+        self.matcher = LexiconMatcher() if config.refinement else None
 
     def forward(self, batch, finetune=False):
         tag_ids = batch.tag_ids
@@ -82,7 +82,8 @@ class SLUTransformer(nn.Module):
                 if (tag == 'O' or tag.startswith('B')) and len(tag_buff) > 0:
                     slot = '-'.join(tag_buff[0].split('-')[1:])
                     value = ''.join([batch.utt[i][j] for j in idx_buff])
-                    value = self.matcher.match(slot, value)
+                    if self.matcher is not None:
+                        value = self.matcher.match(slot, value)
                     idx_buff, tag_buff = [], []
                     pred_tuple.append(f'{slot}-{value}')
                     if tag.startswith('B'):
@@ -94,7 +95,8 @@ class SLUTransformer(nn.Module):
             if len(tag_buff) > 0:
                 slot = '-'.join(tag_buff[0].split('-')[1:])
                 value = ''.join([batch.utt[i][j] for j in idx_buff])
-                value = self.matcher.match(slot, value)
+                if self.matcher is not None:
+                    value = self.matcher.match(slot, value)
                 pred_tuple.append(f'{slot}-{value}')
             predictions.append(pred_tuple)
         if len(output) == 1:

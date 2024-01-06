@@ -24,7 +24,7 @@ from model.slu_bert_rnn_crf import SLUBertRNNCRF
 
 # init args
 args = init_args(sys.argv[1:])
-ckpt_path = f'./ckpt/{args.model}'
+ckpt_path = os.path.join(args.ckpt, args.model)
 if args.encoder_cell is not None:
     ckpt_path = os.path.join(ckpt_path, str(args.encoder_cell).lower())
 os.makedirs(ckpt_path, exist_ok=True)
@@ -48,7 +48,7 @@ train_path = os.path.join(args.dataroot, 'train.json')
 dev_path = os.path.join(args.dataroot, 'development.json')
 Example.configuration(args.dataroot, train_path=train_path)
 train_dataset = Example.load_dataset(train_path, use_correction=args.correction)
-dev_dataset = Example.load_dataset(dev_path)
+dev_dataset = Example.load_dataset(dev_path, use_correction=args.correction)
 args.vocab_size = Example.word_vocab.vocab_size
 args.num_tags = Example.label_vocab.num_tags
 args.pad_idx = Example.word_vocab[PAD]

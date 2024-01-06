@@ -28,7 +28,10 @@ class Example():
         super(Example, self).__init__()
         self.ex = ex
         self.did = did
-        self.utt = ex['manual_transcript'] if use_correction else ex['asr_1best']
+        if use_correction and 'manual_transcript' in ex:
+            self.utt = ex['manual_transcript']
+        else:
+            self.utt = ex['asr_1best']
         self.slot = {}
         for label in ex['semantic']:
             act_slot = f'{label[0]}-{label[1]}'

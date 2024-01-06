@@ -33,7 +33,7 @@ class SLUBertRNNCRF(nn.Module):
         self.rnn = getattr(nn, config.encoder_cell)(config.embed_size, config.hidden_size // 2, num_layers=config.num_layer, bidirectional=True, batch_first=True)
         self.dropout = nn.Dropout(p=config.dropout)
         self.decoder = BertRNNCRFDecoder(config.hidden_size, config.num_tags)
-        self.matcher = LexiconMatcher()
+        self.matcher = LexiconMatcher() if config.refinement else None
 
     def forward(self, batch, finetune=False):
         sentences = [' '.join(sentence.replace(' ', '-')) for sentence in batch.utt] # force to split words
@@ -70,7 +70,8 @@ class SLUBertRNNCRF(nn.Module):
                 if (tag == 'O' or tag.startswith('B')) and len(tag_buff) > 0:
                     slot = '-'.join(tag_buff[0].split('-')[1:])
                     value = ''.join([batch.utt[i][j] for j in idx_buff])
-                    value = self.matcher.match(slot, value)
+                    if self.matcher is not None:
+                        value = self.matcher.match(slot, value)
                     idx_buff, tag_buff = [], []
                     pred_tuple.append(f'{slot}-{value}')
                     if tag.startswith('B'):
@@ -82,7 +83,8 @@ class SLUBertRNNCRF(nn.Module):
             if len(tag_buff) > 0:
                 slot = '-'.join(tag_buff[0].split('-')[1:])
                 value = ''.join([batch.utt[i][j] for j in idx_buff])
-                value = self.matcher.match(slot, value)
+                if self.matcher is not None:
+                    value = self.matcher.match(slot, value)
                 pred_tuple.append(f'{slot}-{value}')
             predictions.append(pred_tuple)
         if len(output) == 1:

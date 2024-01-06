@@ -12,11 +12,13 @@ args_choices = {
 def add_argument_base(arg_parser):
     # general
     arg_parser.add_argument('--model', type=str, default='slu_tagging', choices=args_choices['model'], help='model name')
+    arg_parser.add_argument('--ckpt', type=str, default='./ckpt', help='path to save checkpoint')
     arg_parser.add_argument('--dataroot', type=str, default='./data', help='root of data')
     arg_parser.add_argument('--seed', type=int, default=999, help='Random seed')
     arg_parser.add_argument('--device', type=int, default=-1, help='Use which device: -1 -> cpu ; the index of gpu o.w.')
     arg_parser.add_argument('--testing', action='store_true', help='training or evaluation mode')
     arg_parser.add_argument('--correction', action='store_true', help='whether to use correction')
+    arg_parser.add_argument('--refinement', action='store_true', help='whether to use refinement')
     # training
     arg_parser.add_argument('--batch_size', type=int, default=32, help='batch size')
     arg_parser.add_argument('--lr', type=float, default=1e-3, help='learning rate')
