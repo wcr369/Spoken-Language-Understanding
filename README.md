@@ -45,10 +45,12 @@ Latest version is recommended for all the packages, but make sure that your CUDA
 
 ## 🚀 Experiments
 
-We write all the experiment commands in `run.sh` together with the recommended hyperparameters. You can run all the experiments by simply executing the following command:
+We write all the experiment commands in the `script` folder with the recommended hyperparameters. You can run all the experiments by simply executing the following command:
 
 ```bash
-bash run.sh
+bash script/model.sh # main experiment
+bash script/refinement.sh # refinement ablation
+bash script/correction.sh # correction ablation
 ```
 
 The results and models will be saved in the `ckpt` folder.
