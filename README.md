@@ -4,19 +4,21 @@ Exploring Slot Filling Method for Task Oriented Spoken Language Understanding
 <p align="center">
     Project of CS3602 Natural Language Processing, 2023 Fall, SJTU
     <br />
-    <a href="https://github.com/wcr369"><strong>Chenrun Wang</strong></a>
-    &nbsp;
     <a href="https://github.com/xxyQwQ"><strong>Xiangyuan Xue</strong></a>
+    &nbsp;
+    <a href="https://github.com/wcr369"><strong>Chenrun Wang</strong></a>
     &nbsp;
     <a href="https://github.com/Ken-Bing"><strong>Zeyi Zheng</strong></a>
     <br />
 </p>
 <p align="center">
-    <a href='https://github.com/wcr369/Spoken-Language-Understanding'> <img alt='Project Report' src='https://img.shields.io/badge/Project-Report-green?style=flat&logo=googlescholar&logoColor=green'> </a>
+    <a href='assets/report.pdf'> <img alt='Project Report' src='https://img.shields.io/badge/Project-Report-green?style=flat&logo=googlescholar&logoColor=green'> </a>
     <a href="https://github.com/wcr369/Spoken-Language-Understanding"> <img alt="Github Repository" src="https://img.shields.io/badge/Github-Repository-blue?logo=github&logoColor=blue"> </a>
 </p>
 
 This project aims to explore different slot filling methods for task oriented spoken language understanding (SLU).
+
+![teasor](assets/teasor.png)
 
 ## 🛠️ Requirements
 
@@ -51,6 +53,12 @@ We write all the experiment commands in the `script` folder with the recommended
 bash script/model.sh # main experiment
 bash script/refinement.sh # refinement ablation
 bash script/correction.sh # correction ablation
+```
+
+You can reproduce the best model by running the following command:
+
+```bash
+bash script/best.sh
 ```
 
 The results and models will be saved in the `ckpt` folder.
